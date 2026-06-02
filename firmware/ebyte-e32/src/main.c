@@ -75,15 +75,11 @@ static bool button_pressed(int idx)
 static void uart_hex_dump(const uint8_t* data, uint16_t len, int16_t rssi)
 {
     char s[256];
-    int p = snprintf(s, sizeof(s), "\r\nPKT#%lu RSSI=%d LEN=%d\r\n",
-        (unsigned long)rx_count, rssi, len);
-    for (int i = 0; i < len && p < (int)sizeof(s) - 10; i++) {
-        if (i % 32 == 0 && i > 0) {
-            p += snprintf(s + p, sizeof(s) - p, "\r\n");
-        }
+    int p = snprintf(s, sizeof(s), "{\"rssi\":%d,\"data\":\"", rssi);
+    for (int i = 0; i < len && p < (int)sizeof(s) - 5; i++) {
         p += snprintf(s + p, sizeof(s) - p, "%02X", data[i]);
     }
-    p += snprintf(s + p, sizeof(s) - p, "\r\n");
+    p += snprintf(s + p, sizeof(s) - p, "\"}\r\n");
     HAL_UART_Transmit(&huart1, (uint8_t*)s, p, 500);
 }
 
@@ -140,7 +136,7 @@ int main(void)
 
         if (SX1276_FSK_CheckPayloadReady()) {
             SX1276_FSK_ClearIrq();
-            rssi = SX1276_FSK_ReadRssi();
+            rssi = SX1276_FSK_GetPacketRssi();
             rx_total = SX1276_FSK_GetAndClearRxData(rx_buf, sizeof(rx_buf));
 
             for (int i = 0; i < rx_total; i++) {

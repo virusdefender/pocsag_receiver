@@ -74,6 +74,8 @@ void SX1276_FSK_StartRx(void)
     SX1276Write(REG_OPMODE, RF_OPMODE_RECEIVER);
 }
 
+static int16_t packet_rssi;
+
 bool SX1276_FSK_CheckPayloadReady(void)
 {
     if (dio1_fifo_level) {
@@ -82,10 +84,16 @@ bool SX1276_FSK_CheckPayloadReady(void)
 
     if (dio0_irq_fired) {
         dio0_irq_fired = 0;
+        packet_rssi = SX1276_FSK_ReadRssi();
         read_fifo_remaining(); /* precise byte-by-byte drain */
         return true;
     }
     return false;
+}
+
+int16_t SX1276_FSK_GetPacketRssi(void)
+{
+    return packet_rssi;
 }
 
 uint16_t SX1276_FSK_GetAndClearRxData(uint8_t* buf, uint16_t max)

@@ -18,5 +18,6 @@ void SX1276_FSK_ClearDio0Flag(void);
 void SX1276_FSK_StartRx(void);
 bool SX1276_FSK_CheckPayloadReady(void);
 uint16_t SX1276_FSK_GetAndClearRxData(uint8_t* buf, uint16_t max);
+int16_t SX1276_FSK_GetPacketRssi(void);
 
 #endif

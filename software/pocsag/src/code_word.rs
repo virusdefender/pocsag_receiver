@@ -112,7 +112,7 @@ impl<'a> CodeWordReader<'a> {
         let deg = self.read_bcd_u32(deg_digits)?;
         let min = self.read_bcd_u32(2)?;
         let frac = self.read_bcd_u32(4)?;
-        Some(deg as f64 + min as f64 / 60.0 + frac as f64 / 60000.0)
+        Some(deg as f64 + (min as f64 + frac as f64 / 10000.0) / 60.0)
     }
 
     pub fn read_bcd_u32(&mut self, count: usize) -> Option<u32> {

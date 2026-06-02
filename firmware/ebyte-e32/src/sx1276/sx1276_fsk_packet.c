@@ -72,7 +72,6 @@ void SX1276_FSK_Init(uint32_t freq, uint32_t bitrate, uint32_t fdev,
     SX1276Write(REG_SYNCVALUE4, 0x27);  // 0xD8 取反
     SX1276Write(REG_PREAMBLELSB, 0x20);
     SX1276Write(REG_DIOMAPPING1, 0x00);
-    SX1276Write(REG_RXCONFIG, 0x1E);
     SX1276Write(REG_RXTIMEOUT2, 4); /* 4×16×Tbit≈53ms */
 }
 
