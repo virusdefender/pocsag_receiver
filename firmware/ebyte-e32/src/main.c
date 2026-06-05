@@ -36,12 +36,11 @@ u8g2_t u8g2;
 #define RX_FDEV 4500
 #define RX_BW 12500
 
-#define RX_BUF_SIZE 256
+#define RX_BUF_SIZE 64
 
 static uint8_t rx_buf[RX_BUF_SIZE];
 static uint16_t rx_total;
 static uint32_t rx_count;
-static uint32_t last_display_update;
 
 static void buttons_init(void)
 {
@@ -72,10 +71,17 @@ static bool button_pressed(int idx)
     return true;
 }
 
-static void uart_hex_dump(const uint8_t* data, uint16_t len, int16_t rssi)
+static void uart_hex_dump(const uint8_t* data, uint16_t len, int16_t fifo_rssi,
+    int16_t payload_rssi, int32_t fifo_afc_hz, int32_t payload_afc_hz,
+    int32_t fifo_fei_hz, int32_t payload_fei_hz)
 {
-    char s[256];
-    int p = snprintf(s, sizeof(s), "{\"rssi\":%d,\"data\":\"", rssi);
+    char s[512];
+    int p = snprintf(s, sizeof(s),
+        "{\"fifo_rssi\":%d,\"payload_rssi\":%d,"
+        "\"fifo_afc_hz\":%ld,\"payload_afc_hz\":%ld,"
+        "\"fifo_fei_hz\":%ld,\"payload_fei_hz\":%ld,\"data\":\"",
+        fifo_rssi, payload_rssi, (long)fifo_afc_hz, (long)payload_afc_hz,
+        (long)fifo_fei_hz, (long)payload_fei_hz);
     for (int i = 0; i < len && p < (int)sizeof(s) - 5; i++) {
         p += snprintf(s + p, sizeof(s) - p, "%02X", data[i]);
     }
@@ -88,9 +94,12 @@ static void display_update(int16_t rssi)
     u8g2_ClearBuffer(&u8g2);
     u8g2_SetFont(&u8g2, u8g2_font_profont12_mf);
 
-    u8g2_DrawStr(&u8g2, 0, 12, "FSK RX 821.2375M");
-
     char s[32];
+    snprintf(s, sizeof(s), "FSK RX %lu.%04luM",
+        (unsigned long)(RX_FREQ / 1000000UL),
+        (unsigned long)((RX_FREQ % 1000000UL) / 100UL));
+    u8g2_DrawStr(&u8g2, 0, 12, s);
+
     snprintf(s, sizeof(s), "RSSI: %d dBm", rssi);
     u8g2_DrawStr(&u8g2, 0, 28, s);
 
@@ -125,19 +134,18 @@ int main(void)
     snprintf(s, sizeof(s), "FSK RX init OK\r\nver=%02X\r\n", ver);
     HAL_UART_Transmit(&huart1, (uint8_t*)s, strlen(s), 100);
 
-    uint32_t now = HAL_GetTick();
-    last_display_update = now;
-    display_update(SX1276_FSK_ReadRssi());
+    int16_t display_rssi = SX1276_FSK_ReadRssi();
+    display_update(display_rssi);
 
     while (1) {
-        now = HAL_GetTick();
-
-        int16_t rssi = SX1276_FSK_ReadRssi();
-
-        if (SX1276_FSK_CheckPayloadReady()) {
-            SX1276_FSK_ClearIrq();
-            rssi = SX1276_FSK_GetPacketRssi();
-            rx_total = SX1276_FSK_GetAndClearRxData(rx_buf, sizeof(rx_buf));
+        if (SX1276_FSK_ReadPacketIfReady(rx_buf, sizeof(rx_buf), &rx_total)) {
+            int16_t fifo_rssi = SX1276_FSK_GetFifoLevelRssi();
+            int16_t payload_rssi = SX1276_FSK_GetPayloadReadyRssi();
+            int32_t fifo_afc_hz = SX1276_FSK_GetFifoLevelAfcHz();
+            int32_t payload_afc_hz = SX1276_FSK_GetPayloadReadyAfcHz();
+            int32_t fifo_fei_hz = SX1276_FSK_GetFifoLevelFeiHz();
+            int32_t payload_fei_hz = SX1276_FSK_GetPayloadReadyFeiHz();
+            display_rssi = fifo_rssi;
 
             for (int i = 0; i < rx_total; i++) {
                 rx_buf[i] ^= 0xFF;
@@ -147,22 +155,16 @@ int main(void)
 
             HAL_GPIO_WritePin(LED_RX_PORT, LED_RX_PIN, GPIO_PIN_RESET);
 
-            uart_hex_dump(rx_buf, rx_total, rssi);
-            display_update(rssi);
+            uart_hex_dump(rx_buf, rx_total, fifo_rssi, payload_rssi,
+                fifo_afc_hz, payload_afc_hz, fifo_fei_hz, payload_fei_hz);
+            display_update(display_rssi);
 
             HAL_GPIO_WritePin(LED_RX_PORT, LED_RX_PIN, GPIO_PIN_SET);
-            SX1276_FSK_StartRx();
-            last_display_update = now;
-        }
-
-        if (now - last_display_update > 2000) {
-            last_display_update = now;
-            display_update(rssi);
         }
 
         if (button_pressed(0)) {
             snprintf(s, sizeof(s), "\r\nRSSI=%d PKTs=%lu Last=%uB\r\n",
-                rssi, (unsigned long)rx_count, rx_total);
+                display_rssi, (unsigned long)rx_count, rx_total);
             HAL_UART_Transmit(&huart1, (uint8_t*)s, strlen(s), 100);
         }
 
@@ -170,7 +172,7 @@ int main(void)
             snprintf(s, sizeof(s), "\r\n--- CLEAR COUNT ---\r\n");
             HAL_UART_Transmit(&huart1, (uint8_t*)s, strlen(s), 100);
             rx_count = 0;
-            display_update(rssi);
+            display_update(display_rssi);
         }
     }
 }
@@ -241,7 +243,8 @@ static void MX_I2C2_Init(void)
     hi2c2.Init.OwnAddress2 = 0;
     hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
     hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-    HAL_I2C_Init(&hi2c2);
+    if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+        Error_Handler();
 }
 
 static void MX_SPI1_Init(void)
@@ -271,7 +274,8 @@ static void MX_SPI1_Init(void)
     hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
     hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
     hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-    HAL_SPI_Init(&hspi1);
+    if (HAL_SPI_Init(&hspi1) != HAL_OK)
+        Error_Handler();
 }
 
 static void MX_USART1_UART_Init(void)
@@ -298,7 +302,8 @@ static void MX_USART1_UART_Init(void)
     huart1.Init.Mode = UART_MODE_TX_RX;
     huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
     huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-    HAL_UART_Init(&huart1);
+    if (HAL_UART_Init(&huart1) != HAL_OK)
+        Error_Handler();
 }
 
 void Error_Handler(void)

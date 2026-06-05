@@ -12,12 +12,15 @@ void SX1276_FSK_DumpRegs(uint8_t* ver, uint8_t* pa, uint8_t* op,
     uint8_t* padac);
 int16_t SX1276_FSK_ReadRssi(void);
 void SX1276_FSK_ClearIrq(void);
-void SX1276_FSK_ClearDio0Flag(void);
 
 /* RX */
 void SX1276_FSK_StartRx(void);
-bool SX1276_FSK_CheckPayloadReady(void);
-uint16_t SX1276_FSK_GetAndClearRxData(uint8_t* buf, uint16_t max);
-int16_t SX1276_FSK_GetPacketRssi(void);
+bool SX1276_FSK_ReadPacketIfReady(uint8_t* buf, uint16_t max, uint16_t* len);
+int16_t SX1276_FSK_GetFifoLevelRssi(void);
+int16_t SX1276_FSK_GetPayloadReadyRssi(void);
+int32_t SX1276_FSK_GetFifoLevelAfcHz(void);
+int32_t SX1276_FSK_GetPayloadReadyAfcHz(void);
+int32_t SX1276_FSK_GetFifoLevelFeiHz(void);
+int32_t SX1276_FSK_GetPayloadReadyFeiHz(void);
 
 #endif

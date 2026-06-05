@@ -116,54 +116,63 @@ impl<'a> CodeWordReader<'a> {
     }
 
     pub fn read_bcd_u32(&mut self, count: usize) -> Option<u32> {
+        let mut digits = Vec::with_capacity(count);
+        for _ in 0..count {
+            digits.push(self.read_nibble()?);
+        }
+        if digits.iter().all(|n| *n == 0xD) {
+            return Some(0);
+        }
+
         let mut val: u32 = 0;
         let mut has_digit = false;
-        let mut failed = false;
-        for _ in 0..count {
-            match self.read_nibble() {
-                None => return None,
-                Some(n) if n <= 9 => {
+        for n in digits {
+            match n {
+                0..=9 => {
                     val = val * 10 + n as u32;
                     has_digit = true;
                 }
-                Some(n) if n == 0xC => {
-                    // space padding
-                }
-                Some(_) => {
-                    failed = true;
-                }
+                0xC => {}
+                _ => return None,
             }
         }
-        if failed || !has_digit {
+        if !has_digit {
             return None;
         }
         Some(val)
     }
 
     pub fn read_bcd_i32(&mut self, count: usize) -> Option<i32> {
+        let mut digits = Vec::with_capacity(count);
+        for _ in 0..count {
+            digits.push(self.read_nibble()?);
+        }
+        if digits.iter().all(|n| *n == 0xD) {
+            return Some(0);
+        }
+
         let mut val: i32 = 0;
         let mut negative = false;
         let mut has_digit = false;
-        let mut failed = false;
-        for _ in 0..count {
-            match self.read_nibble() {
-                None => return None,
-                Some(n) if n <= 9 => {
+        let mut sign_allowed = true;
+        for n in digits {
+            match n {
+                0..=9 => {
                     val = val * 10 + n as i32;
                     has_digit = true;
+                    sign_allowed = false;
                 }
-                Some(n) if n == 0xC => {
+                0xC => {
                     // space padding
                 }
-                Some(n) if !has_digit && n == 0xD => {
+                0xD if sign_allowed => {
                     negative = true;
+                    sign_allowed = false;
                 }
-                Some(_) => {
-                    failed = true;
-                }
+                _ => return None,
             }
         }
-        if failed || !has_digit {
+        if !has_digit {
             return None;
         }
         Some(if negative { -val } else { val })

@@ -15,15 +15,19 @@ void SX1276InitIo(void)
 
     GPIO_InitTypeDef gpio = { 0 };
 
-    /* DIO0: PB1 input */
+    /* DIO0: PB1 PayloadReady interrupt */
     gpio.Pin = GPIO_PIN_1;
-    gpio.Mode = GPIO_MODE_INPUT;
+    gpio.Mode = GPIO_MODE_IT_RISING;
     gpio.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOB, &gpio);
+    HAL_NVIC_SetPriority(EXTI1_IRQn, 1, 0);
+    HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
-    /* DIO1: PA3 input (unused) */
+    /* DIO1: PA3 FifoLevel interrupt */
     gpio.Pin = GPIO_PIN_3;
     HAL_GPIO_Init(GPIOA, &gpio);
+    HAL_NVIC_SetPriority(EXTI3_IRQn, 1, 0);
+    HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 
     /* SPI_CS: PA4 output */
     gpio.Pin = GPIO_PIN_4;
